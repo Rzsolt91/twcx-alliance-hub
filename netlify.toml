@@ -3,6 +3,10 @@
   publish = "dist"
   functions = "netlify/functions"
 
+[build.environment]
+  NODE_VERSION = "22"
+  NPM_FLAGS = "--no-fund"
+
 [functions]
   node_bundler = "esbuild"
 

@@ -7,7 +7,7 @@ import { admin } from "@netlify/identity";
 import type { Account } from "../auth.js";
 import { ACCOUNT_COLUMNS, assertPlayerName, currentAccount, shapeAccount } from "../auth.js";
 import { hashEmailForLookup, normaliseEmail } from "../crypto-email.js";
-import { query, queryOne, transaction } from "../db.js";
+import { query, queryOne, transaction, type TxClient } from "../db.js";
 import { finishDiscordOAuth, profileRedirect } from "../discord.js";
 import { backfillPlaintextEmail, emailColumns } from "../emails.js";
 import { HttpError, ok, okWithCookie, readJson, text } from "../http.js";
@@ -224,6 +224,31 @@ function sameSecret(left: string, right: string) {
   return timingSafeEqual(a, b);
 }
 
+async function applyLiveSchema(client: TxClient) {
+  const statements = [
+    `CREATE TABLE IF NOT EXISTS invite_codes (
+       id BIGSERIAL PRIMARY KEY,
+       code TEXT NOT NULL UNIQUE,
+       active BOOLEAN NOT NULL DEFAULT TRUE,
+       created_by BIGINT REFERENCES users(id) ON DELETE SET NULL,
+       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+       note TEXT NOT NULL DEFAULT ''
+     )`,
+    `CREATE INDEX IF NOT EXISTS idx_invite_codes_active ON invite_codes(active, created_at DESC)`,
+    `ALTER TABLE users ALTER COLUMN player_name DROP NOT NULL`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN NOT NULL DEFAULT FALSE`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS player_stats JSONB NOT NULL DEFAULT '{}'::jsonb`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_encrypted TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS email_lookup_hash TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS discord_id TEXT`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lookup ON users(email_lookup_hash) WHERE email_lookup_hash IS NOT NULL`,
+    `ALTER TABLE event_signups ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ`,
+  ];
+  for (const sql of statements) {
+    await client.query(sql);
+  }
+}
+
 /**
  * POST /api/auth/live-setup — one-shot production seed.
  * Disabled unless TWCX_BOOTSTRAP_TOKEN is set; remove that env after go-live.
@@ -242,6 +267,7 @@ async function liveSetup(req: Request) {
   const passwordHash = await hashPassword(password);
 
   await transaction(async (client) => {
+    await applyLiveSchema(client);
     await client.query(`
       TRUNCATE TABLE
         user_sessions,
