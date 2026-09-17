@@ -48,14 +48,16 @@ async function register(req: Request) {
   const timezone = normaliseTimezone(body.timezone ?? "UTC");
   const language = normaliseLanguage(body.language ?? "en");
 
-  const occupied = await queryOne("SELECT 1 FROM users WHERE active = TRUE");
-  if (occupied) {
-    const invite = await activeInvite(inviteCode);
-    if (!invite) throw new HttpError("Invalid or inactive invite link.", 403);
-  } else if (inviteCode) {
-    const invite = await activeInvite(inviteCode);
-    if (!invite) throw new HttpError("Invalid or inactive invite link.", 403);
-  }
+  let invite: Awaited<ReturnType<typeof activeInvite>> | null = null;
+
+const occupied = await queryOne("SELECT 1 FROM users WHERE active = TRUE");
+if (occupied) {
+  invite = await activeInvite(inviteCode);
+  if (!invite) throw new HttpError("Invalid or inactive invite link.", 403);
+} else if (inviteCode) {
+  invite = await activeInvite(inviteCode);
+  if (!invite) throw new HttpError("Invalid or inactive invite link.", 403);
+}
 
   const lookup = hashEmailForLookup(email);
   const existing = await queryOne("SELECT 1 FROM users WHERE email_lookup_hash = $1", [lookup]);
@@ -66,13 +68,14 @@ async function register(req: Request) {
   if (identityOn) {
     try {
       const created = await admin.createUser({
-        email,
-        password,
-        data: {
-          user_metadata: { invite_code: invite.code },
-          app_metadata: { invite: true },
-        },
-      });
+  email,
+  password,
+  data: {
+    user_metadata: invite ? { invite_code: invite.code } : {},
+    app_metadata: { invite: Boolean(invite) },
+  },
+});
+
       identityId = created.id;
     } catch (error) {
       const message = error instanceof Error ? error.message : "Identity signup failed.";
