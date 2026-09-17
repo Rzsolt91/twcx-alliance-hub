@@ -1,6 +1,6 @@
 import type { UserSignupEvent } from "@netlify/functions";
 import { transaction } from "../lib/db.js";
-import { emailColumns, hashLookup } from "../lib/emails.js";
+import { emailColumns } from "../lib/emails.js";
 
 /**
  * Identity signup trigger: create (or link) the portal account as the Identity
@@ -20,7 +20,7 @@ export default {
       String(event.user.userMetadata?.full_name ?? email.split("@")[0] ?? "Player").trim().slice(0, 30) || "Player";
 
     const packed = email ? emailColumns(email) : emailColumns(null);
-    const lookup = email ? hashLookup(email) : null;
+    const lookup = packed.email_lookup_hash;
 
     const role = await transaction(async (client) => {
       await client.query("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE");

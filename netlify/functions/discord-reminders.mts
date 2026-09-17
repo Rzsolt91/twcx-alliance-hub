@@ -19,6 +19,5 @@ export default async () => {
 };
 
 export const config: Config = {
-  path: "/.netlify/functions/discord-reminders",
   schedule: "*/5 * * * *",
 };
