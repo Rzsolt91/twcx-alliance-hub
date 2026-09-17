@@ -266,9 +266,10 @@ async function liveSetup(req: Request) {
   const packed = emailColumns(email);
   const passwordHash = await hashPassword(password);
 
-  await transaction(async (client) => {
-    await applyLiveSchema(client);
-    await client.query(`
+  try {
+    await transaction(async (client) => {
+      await applyLiveSchema(client);
+      await client.query(`
       TRUNCATE TABLE
         user_sessions,
         invite_codes,
@@ -290,20 +291,24 @@ async function liveSetup(req: Request) {
         users
       RESTART IDENTITY CASCADE
     `);
-    const created = await client.query<{ id: number }>(
-      `INSERT INTO users (
+      const created = await client.query<{ id: number }>(
+        `INSERT INTO users (
          email, email_encrypted, email_lookup_hash, player_name, login_name, identity_id,
          password_hash, password_set_at, role, timezone, language, onboarding_complete, player_stats
        ) VALUES (NULL, $1, $2, $3, $4, NULL, $5, NOW(), 'MASTER', 'UTC', 'en', TRUE, '{}'::jsonb)
        RETURNING id`,
-      [packed.email_encrypted, packed.email_lookup_hash, name, key, passwordHash],
-    );
-    await client.query(
-      `INSERT INTO players (name, rank, main_squad, rank_level, user_id, air_power, tank_power, missile_power, thp)
+        [packed.email_encrypted, packed.email_lookup_hash, name, key, passwordHash],
+      );
+      await client.query(
+        `INSERT INTO players (name, rank, main_squad, rank_level, user_id, air_power, tank_power, missile_power, thp)
        VALUES ($1, 'R4', 'AIR', 4, $2, 0, 0, 0, 0)`,
-      [name, created.rows[0].id],
-    );
-  });
+        [name, created.rows[0].id],
+      );
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "live setup failed";
+    throw new HttpError(message, 500);
+  }
 
   return ok({ ready: true, playerName: name, role: "MASTER" });
 }
