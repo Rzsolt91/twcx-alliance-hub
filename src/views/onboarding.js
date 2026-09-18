@@ -6,13 +6,10 @@
 import { api } from "../lib/api.js";
 import { field, fill, h, input, select, toast } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
+import { powerInput, readPowerForm } from "../lib/power.js";
 import { account, loadSession, patchAccount } from "../lib/store.js";
 
 const SQUADS = ["AIR", "TANK", "MISSILE"];
-
-function powerInput(value = 0) {
-  return input({ type: "number", min: "0", step: "1", value: String(Math.round(Number(value) || 0)), required: true });
-}
 
 export function renderOnboarding({ onDone }) {
   const host = h("div", { class: "gate" });
@@ -128,10 +125,7 @@ export function renderOnboarding({ onDone }) {
             try {
               const payload = await api.post("account/onboarding", {
                 playerName,
-                airPower: Number(air.value) || 0,
-                tankPower: Number(tank.value) || 0,
-                missilePower: Number(missile.value) || 0,
-                thp: Number(thp.value) || 0,
+                ...readPowerForm({ air, tank, missile, thp }),
                 mainSquad: main.value,
               });
               patchAccount({

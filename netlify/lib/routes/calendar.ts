@@ -4,6 +4,7 @@ import { query, queryOne } from "../db.js";
 import { HttpError, boolean, clockTime, integer, isoDate, ok, oneOf, readJson, text } from "../http.js";
 import type { RouteTable } from "../router.js";
 import {
+  asClock,
   instantFromServerClock,
   occurrencesInRange,
   serverWallClock,
@@ -30,7 +31,8 @@ async function list(account: Account, url: URL) {
   const { from, to, today } = resolveRange(url);
 
   const manual = await query(
-    `SELECT c.id, c.title, c.event_date::text AS event_date, c.server_time, c.description, c.category, u.player_name AS author
+    `SELECT c.id, c.title, c.event_date::text AS event_date, c.server_time::text AS server_time,
+            c.description, c.category, u.player_name AS author
      FROM calendar_events c
      LEFT JOIN users u ON u.id = c.created_by
      WHERE c.active = TRUE AND c.event_date BETWEEN $1 AND $2
@@ -45,7 +47,8 @@ async function list(account: Account, url: URL) {
     server_time: string;
     description: string;
   }>(
-    `SELECT id, title, weekday, server_time, description FROM weekly_events WHERE active = TRUE`,
+    `SELECT id, title, weekday::int AS weekday, server_time::text AS server_time, description
+     FROM weekly_events WHERE active = TRUE`,
   );
 
   const reminders = await query<{ event_kind: string; event_id: number }>(
@@ -55,7 +58,7 @@ async function list(account: Account, url: URL) {
   const reminded = new Set(reminders.map((row) => `${row.event_kind}:${row.event_id}`));
 
   const entries = manual.map((row) => {
-    const serverTime = String(row.server_time).slice(0, 5);
+    const serverTime = asClock(row.server_time);
     const date = String(row.event_date).slice(0, 10);
     return {
       key: `CALENDAR:${row.id}:${date}`,
@@ -75,8 +78,8 @@ async function list(account: Account, url: URL) {
   });
 
   for (const storm of storms) {
-    const serverTime = storm.server_time.slice(0, 5);
-    for (const date of occurrencesInRange(storm.weekday, from, to)) {
+    const serverTime = asClock(storm.server_time);
+    for (const date of occurrencesInRange(Number(storm.weekday), from, to)) {
       entries.push({
         key: `WEEKLY:${storm.id}:${date}`,
         kind: "WEEKLY" as any,

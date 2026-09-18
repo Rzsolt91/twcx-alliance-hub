@@ -9,9 +9,9 @@
 import { api } from "../lib/api.js";
 import { chip, field, h, icon, input, modal, toast } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
+import { formatPower } from "../lib/power.js";
 
-const NUMBER = new Intl.NumberFormat("en-GB");
-const fmt = (value) => NUMBER.format(Math.round(Number(value) || 0));
+const fmt = (value) => formatPower(value);
 
 const FIELD_LABELS = () => ({
   name: t("squads.name"),

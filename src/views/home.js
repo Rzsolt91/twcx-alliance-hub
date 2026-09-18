@@ -5,12 +5,11 @@ import { countdown, dateTimeIn, formatServerDate, timeIn, viewTick, zoneLabel } 
 import { siteContent, hero } from "../lib/content.js";
 import { chip, empty, frag, h, icon, meter, panel, stat } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
+import { formatPower } from "../lib/power.js";
 import { canManage, myZone } from "../lib/store.js";
 
-const NUMBER = new Intl.NumberFormat("en-GB");
-
 function power(value) {
-  return NUMBER.format(Math.round(Number(value) || 0));
+  return formatPower(value);
 }
 
 function categoryTone(category) {
@@ -25,7 +24,8 @@ function entry(item, zone, isNext) {
   const instant = new Date(item.instant);
   const count = h("span", { class: "countdown" });
 
-  const stop = viewTick((now) => {
+  let stop = () => {};
+  stop = viewTick((now) => {
     const remaining = countdown(instant, now);
     count.textContent = remaining ?? t("common.today");
     if (!remaining) stop();

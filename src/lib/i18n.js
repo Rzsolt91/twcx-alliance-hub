@@ -78,8 +78,11 @@ const en = {
   "onboard.nameShort": "Player name must be at least 3 characters.",
   "onboard.next": "Continue",
   "onboard.powerTitle": "Power stats",
-  "onboard.powerNote": "Air, tank, missile and total hero power, as the game shows them.",
+  "onboard.powerNote": "Air, tank, missile and total hero power. Type 65M, 65,32M or 65000000.",
   "onboard.finish": "Enter the portal",
+
+  "power.hint": "Examples: 65M, 65.32M, 65,32M or 65000000",
+  "power.invalid": "Enter power as 65M, 65.32M or 65000000.",
 
   "common.save": "Save",
   "common.cancel": "Cancel",
@@ -495,8 +498,11 @@ const ko = {
   "onboard.nameShort": "닉네임은 3자 이상이어야 합니다.",
   "onboard.next": "계속",
   "onboard.powerTitle": "전투력",
-  "onboard.powerNote": "게임에 표시되는 공군, 전차, 미사일, 영웅 전투력입니다.",
+  "onboard.powerNote": "공군, 전차, 미사일, 영웅 전투력입니다. 65M, 65,32M 또는 65000000처럼 입력하세요.",
   "onboard.finish": "포털 입장",
+
+  "power.hint": "예: 65M, 65.32M, 65,32M 또는 65000000",
+  "power.invalid": "전투력은 65M, 65.32M 또는 65000000 형식으로 입력하세요.",
 
   "common.save": "저장",
   "common.cancel": "취소",

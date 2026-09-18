@@ -1,5 +1,7 @@
 /** Small HTTP helpers shared by every API route. */
 
+import { parsePower } from "../../shared/power.js";
+
 export type Json = Record<string, unknown>;
 
 export function ok(data: unknown, status = 200) {
@@ -58,6 +60,16 @@ export function decimal(value: unknown, field: string, { min = 0, max = 1e12 } =
   if (!Number.isFinite(out)) throw new HttpError(`${field} must be a number.`, 422);
   if (out < min || out > max) throw new HttpError(`${field} must be between ${min} and ${max}.`, 422);
   return Math.round(out * 100) / 100;
+}
+
+/** Power reading: `65M`, `65,32M`, `65.32M` or a plain number. */
+export function powerAmount(value: unknown, field: string, { min = 0, max = 1e12 } = {}) {
+  const out = parsePower(value);
+  if (!Number.isFinite(out)) {
+    throw new HttpError(`${field} must be a number such as 65M, 65.32M or 65000000.`, 422);
+  }
+  if (out < min || out > max) throw new HttpError(`${field} must be between ${min} and ${max}.`, 422);
+  return out;
 }
 
 export function oneOf<T extends string>(value: unknown, allowed: readonly T[], field: string): T {

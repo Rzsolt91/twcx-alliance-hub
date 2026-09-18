@@ -2,7 +2,7 @@ import type { Account } from "../auth.js";
 import type { RouteTable } from "../router.js";
 import { canManage, ownPlayer, requireManage, requireModule } from "../auth.js";
 import { query, queryOne, transaction } from "../db.js";
-import { HttpError, decimal, integer, ok, oneOf, readJson, text } from "../http.js";
+import { HttpError, integer, ok, oneOf, powerAmount, readJson, text } from "../http.js";
 import { buildPreview } from "../roster-import.js";
 import { MAX_SHEET_ROWS, parseDelimitedText, parseSpreadsheet } from "../sheets.js";
 import { deleteUpload, fetchUpload, readMultipart } from "../uploads.js";
@@ -111,14 +111,14 @@ async function logProgress(playerId: number, power: Record<Squad, number>, thp: 
 
 function readPower(body: Record<string, unknown>) {
   return {
-    AIR: decimal(body.airPower ?? 0, "Air power"),
-    TANK: decimal(body.tankPower ?? 0, "Tank power"),
-    MISSILE: decimal(body.missilePower ?? 0, "Missile power"),
+    AIR: powerAmount(body.airPower ?? 0, "Air power"),
+    TANK: powerAmount(body.tankPower ?? 0, "Tank power"),
+    MISSILE: powerAmount(body.missilePower ?? 0, "Missile power"),
   };
 }
 
 function readThp(body: Record<string, unknown>) {
-  return decimal(body.thp ?? 0, "THP");
+  return powerAmount(body.thp ?? 0, "THP");
 }
 
 /** True when any reading moved, so the progress log stays free of no-ops. */
@@ -227,7 +227,7 @@ async function updateOwn(account: Account, req: Request) {
 async function updateOwnSquad(account: Account, req: Request) {
   const body = await readJson(req);
   const squad = oneOf(body.squad, SQUADS, "Squad");
-  const value = decimal(body.power, "Power");
+  const value = powerAmount(body.power, "Power");
   const mine = await ownPlayer(account);
 
   await transaction(async (client) => {

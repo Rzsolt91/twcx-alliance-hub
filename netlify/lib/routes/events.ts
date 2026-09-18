@@ -3,7 +3,7 @@ import { canManage, ownPlayer, requireManage, requireModule } from "../auth.js";
 import { query, queryOne, transaction } from "../db.js";
 import { HttpError, clockTime, integer, isoDate, ok, oneOf, readJson, text } from "../http.js";
 import type { RouteTable } from "../router.js";
-import { nextOccurrenceDate, serverWallClock, shiftServerDate } from "../../../shared/time.js";
+import { asClock, nextOccurrenceDate, serverWallClock, shiftServerDate } from "../../../shared/time.js";
 import { SQUADS } from "./roster.js";
 
 const UPCOMING_SLOTS = 4;
@@ -25,7 +25,7 @@ type WeeklyEventRow = {
  * server calendar dates.
  */
 function occurrences(event: WeeklyEventRow, now: Date) {
-  const serverTime = event.server_time.slice(0, 5);
+  const serverTime = asClock(event.server_time);
   const first = nextOccurrenceDate(event.weekday, serverTime, now);
 
   const upcoming: string[] = [];
@@ -48,7 +48,7 @@ function shapeEvent(row: WeeklyEventRow, now: Date) {
     code: row.code,
     title: row.title,
     weekday: row.weekday,
-    serverTime: row.server_time.slice(0, 5),
+    serverTime: asClock(row.server_time),
     description: row.description,
     active: row.active,
     upcoming: slots.upcoming,
@@ -64,7 +64,7 @@ async function overview(account: Account) {
   const manage = canManage(account);
 
   const rows = await query<WeeklyEventRow>(
-    `SELECT id, code, title, weekday, server_time, description, active
+    `SELECT id, code, title, weekday::int AS weekday, server_time::text AS server_time, description, active
      FROM weekly_events ORDER BY weekday, server_time`,
   );
   const events = rows.map((row) => shapeEvent(row, now));

@@ -1,6 +1,6 @@
 import { sendDiscordDM } from "./discord.js";
 import { query } from "./db.js";
-import { instantFromServerClock, nextOccurrenceDate, shiftServerDate } from "../../shared/time.js";
+import { asClock, instantFromServerClock, nextOccurrenceDate, shiftServerDate } from "../../shared/time.js";
 
 /** DMs go out once, five minutes before that event starts — not on a 24/7 poll. */
 const LEAD_MINUTES = 5;
@@ -52,7 +52,7 @@ export async function msUntilNextReminder(): Promise<number | null> {
   let soonest: number | null = null;
 
   for (const slot of slots) {
-    const time = String(slot.server_time).slice(0, 5);
+    const time = asClock(slot.server_time);
     let date = nextOccurrenceDate(Number(slot.weekday), time, new Date(now));
     for (let week = 0; week < 3; week += 1) {
       const startAt = instantFromServerClock(date, time).getTime();
@@ -98,13 +98,13 @@ export async function runReminderPass() {
   let deferred = 0;
 
   for (const row of rows) {
-    const start = instantFromServerClock(row.occurrence_date.slice(0, 10), String(row.server_time).slice(0, 5));
+    const start = instantFromServerClock(row.occurrence_date.slice(0, 10), asClock(row.server_time));
     if (!inSendWindow(start.getTime(), now)) {
       skipped += 1;
       continue;
     }
 
-    const clock = `${row.occurrence_date.slice(0, 10)} ${String(row.server_time).slice(0, 5)}`;
+    const clock = `${row.occurrence_date.slice(0, 10)} ${asClock(row.server_time)}`;
     const name = row.player_name || "commander";
     const message = `TWCX reminder: ${row.title} starts at ${clock} server time. You are signed up, ${name}.`;
 

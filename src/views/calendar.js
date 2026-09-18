@@ -89,7 +89,7 @@ export default async function calendarView() {
   function eventDialog(entry) {
     const titleInput = input({ type: "text", maxlength: 120, value: entry?.title ?? "", required: true });
     const dateInput = input({ type: "date", value: entry?.date ?? serverToday(), required: true });
-    const timeInput = input({ type: "time", value: entry?.serverTime ?? "12:00", required: true });
+    const timeInput = input({ type: "time", value: (entry?.serverTime ?? "12:00").slice(0, 5), required: true });
     const categorySelect = select(
       { value: entry?.category ?? "ALLIANCE" },
       CATEGORIES.map((category) => ({ value: category, label: t(`calendar.category.${category}`) })),
@@ -328,7 +328,8 @@ export default async function calendarView() {
       { class: "stack" },
       ...upcoming.map((entry, index) => {
         const count = h("span", { class: "countdown" });
-        const stop = tick((now) => {
+        let stop = () => {};
+        stop = tick((now) => {
           const remaining = countdown(entry.instant, now);
           count.textContent = remaining ?? t("common.today");
           if (!remaining) stop();
@@ -380,12 +381,19 @@ export default async function calendarView() {
 
   async function load() {
     dropTickers();
-    const window = monthMatrix(month);
-    const from = window[0];
-    const to = window[window.length - 1];
-    const data = await api.get(`calendar?from=${from}&to=${to}`);
+    const days = monthMatrix(month);
+    const from = days[0];
+    const to = days[days.length - 1];
+    let data = { entries: [], today: serverToday(), canManage: manage };
+    try {
+      data = await api.get(`calendar?from=${from}&to=${to}`);
+    } catch (error) {
+      toast(error.message || t("error.loadFailed"), "error");
+    }
 
-    const reminders = data.entries.filter((entry) => entry.reminded);
+    const reminders = (data.entries ?? []).filter((entry) => entry.reminded);
+    const entries = data.entries ?? [];
+    const today = data.today ?? serverToday();
 
     fill(
       root,
@@ -442,12 +450,12 @@ export default async function calendarView() {
               )
             : null,
         ),
-        body: grid(data.entries, data.today),
+        body: grid(entries, today),
       }),
       h(
         "div",
         { class: "grid--halves" },
-        panel({ title: t("calendar.upcomingList"), body: agenda(data.entries, data.today) }),
+        panel({ title: t("calendar.upcomingList"), body: agenda(entries, today) }),
         panel({
           title: t("calendar.remindersTitle"),
           body: reminders.length

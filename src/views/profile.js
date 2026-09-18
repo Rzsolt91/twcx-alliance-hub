@@ -28,16 +28,10 @@ import {
   zoneLabel,
 } from "../lib/clock.js";
 import { LANGUAGES, setLanguage, t } from "../lib/i18n.js";
+import { formatPower, powerInput, powerSum, readPowerForm } from "../lib/power.js";
 import { account, patchAccount, session } from "../lib/store.js";
 
 const SQUADS = ["AIR", "TANK", "MISSILE"];
-const NUMBER = new Intl.NumberFormat("en-GB");
-
-const fmt = (value) => NUMBER.format(Math.round(Number(value) || 0));
-
-function powerInput(value) {
-  return input({ type: "number", min: "0", step: "1", value: String(Math.round(Number(value) || 0)) });
-}
 
 export default async function profileView({ rerender, params }) {
   const me = account();
@@ -302,10 +296,10 @@ export default async function profileView({ rerender, params }) {
       { value: current.mainSquad },
       SQUADS.map((squad) => ({ value: squad, label: t(`squad.${squad}`) })),
     );
-    const total = h("strong", { class: "mono", text: fmt(current.totalPower) });
+    const total = h("strong", { class: "mono", text: formatPower(current.totalPower) });
 
     const recompute = () => {
-      total.textContent = fmt(SQUADS.reduce((sum, squad) => sum + (Number(inputs[squad].value) || 0), 0));
+      total.textContent = formatPower(powerSum(Object.values(inputs)));
     };
     for (const node of Object.values(inputs)) node.addEventListener("input", recompute);
 
@@ -321,10 +315,7 @@ export default async function profileView({ rerender, params }) {
           try {
             await api.patch("roster/mine", {
               mainSquad: mainSelect.value,
-              airPower: Number(inputs.AIR.value) || 0,
-              tankPower: Number(inputs.TANK.value) || 0,
-              missilePower: Number(inputs.MISSILE.value) || 0,
-              thp: Number(thpInput.value) || 0,
+              ...readPowerForm({ air: inputs.AIR, tank: inputs.TANK, missile: inputs.MISSILE, thp: thpInput }),
             });
             toast(t("profile.squadsSaved"), "ok");
             await rerender();
@@ -337,7 +328,7 @@ export default async function profileView({ rerender, params }) {
       h(
         "div",
         { class: "form form--inline" },
-        field(t("squads.airPower"), inputs.AIR),
+        field(t("squads.airPower"), inputs.AIR, t("power.hint")),
         field(t("squads.tankPower"), inputs.TANK),
         field(t("squads.missilePower"), inputs.MISSILE),
       ),
@@ -425,7 +416,7 @@ export default async function profileView({ rerender, params }) {
       { class: "grid--stats" },
       stat({ label: t("profile.role"), value: t(`role.${me.role}`), note: t("profile.roleNote") }),
       stat({ label: t("squads.name"), value: me.playerName || "—" }),
-      stat({ label: t("squads.thpLong"), value: fmt(dashboard.me.thp), note: t("squads.thp") }),
+      stat({ label: t("squads.thpLong"), value: formatPower(dashboard.me.thp), note: t("squads.thp") }),
       stat({ label: t("profile.timezone"), value: zoneLabel(me.timezone), note: me.timezone.replace(/_/g, " ") }),
     ),
     discordPanel(),

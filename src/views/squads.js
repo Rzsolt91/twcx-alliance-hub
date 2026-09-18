@@ -22,20 +22,14 @@ import {
   toast,
 } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
+import { formatPower, powerInput, powerSum, readPowerForm } from "../lib/power.js";
 import { canManage } from "../lib/store.js";
 import { importDialog } from "./roster-import.js";
 
 const SQUADS = ["AIR", "TANK", "MISSILE"];
-const NUMBER = new Intl.NumberFormat("en-GB");
-
-const fmt = (value) => NUMBER.format(Math.round(Number(value) || 0));
 
 function squadOptions() {
   return SQUADS.map((squad) => ({ value: squad, label: t(`squad.${squad}`) }));
-}
-
-function powerInput(value) {
-  return input({ type: "number", min: "0", step: "1", value: String(Math.round(Number(value) || 0)) });
 }
 
 /** Total power per reading date, for the trend sparkline. */
@@ -72,11 +66,11 @@ export default async function squadsView({ rerender }) {
     };
     const thpInput = powerInput(mine.thp);
     const mainSelect = select({ value: mine.mainSquad }, squadOptions());
-    const total = h("strong", { class: "mono", text: fmt(mine.totalPower) });
+    const total = h("strong", { class: "mono", text: formatPower(mine.totalPower) });
 
     const recompute = () => {
-      const sum = SQUADS.reduce((acc, squad) => acc + (Number(inputs[squad].value) || 0), 0);
-      total.textContent = fmt(sum);
+      const sum = powerSum(Object.values(inputs));
+      total.textContent = formatPower(sum);
     };
     for (const node of Object.values(inputs)) node.addEventListener("input", recompute);
 
@@ -92,10 +86,7 @@ export default async function squadsView({ rerender }) {
           try {
             await api.patch("roster/mine", {
               mainSquad: mainSelect.value,
-              airPower: Number(inputs.AIR.value) || 0,
-              tankPower: Number(inputs.TANK.value) || 0,
-              missilePower: Number(inputs.MISSILE.value) || 0,
-              thp: Number(thpInput.value) || 0,
+              ...readPowerForm({ air: inputs.AIR, tank: inputs.TANK, missile: inputs.MISSILE, thp: thpInput }),
             });
             toast(t("common.saved"), "ok");
             await rerender();
@@ -108,7 +99,7 @@ export default async function squadsView({ rerender }) {
       h(
         "div",
         { class: "form form--inline" },
-        field(t("squads.airPower"), inputs.AIR),
+        field(t("squads.airPower"), inputs.AIR, t("power.hint")),
         field(t("squads.tankPower"), inputs.TANK),
         field(t("squads.missilePower"), inputs.MISSILE),
       ),
@@ -154,7 +145,7 @@ export default async function squadsView({ rerender }) {
         h(
           "div",
           { class: "form form--inline" },
-          field(t("squads.airPower"), inputs.AIR),
+          field(t("squads.airPower"), inputs.AIR, t("power.hint")),
           field(t("squads.tankPower"), inputs.TANK),
           field(t("squads.missilePower"), inputs.MISSILE),
         ),
@@ -174,10 +165,7 @@ export default async function squadsView({ rerender }) {
                 name: nameInput.value.trim(),
                 rank: rankSelect.value,
                 mainSquad: mainSelect.value,
-                airPower: Number(inputs.AIR.value) || 0,
-                tankPower: Number(inputs.TANK.value) || 0,
-                missilePower: Number(inputs.MISSILE.value) || 0,
-                thp: Number(thpInput.value) || 0,
+                ...readPowerForm({ air: inputs.AIR, tank: inputs.TANK, missile: inputs.MISSILE, thp: thpInput }),
               };
               try {
                 if (player) await api.patch("roster", { id: player.id, ...payload });
@@ -225,9 +213,9 @@ export default async function squadsView({ rerender }) {
           "div",
           { class: "grid grid--stats" },
           ...SQUADS.map((squad) =>
-            stat({ label: t(`squad.${squad}`), value: fmt(player.power[squad]) }),
+            stat({ label: t(`squad.${squad}`), value: formatPower(player.power[squad]) }),
           ),
-          stat({ label: t("squads.thpLong"), value: fmt(player.thp) }),
+          stat({ label: t("squads.thpLong"), value: formatPower(player.thp) }),
         ),
       ),
     });
@@ -316,14 +304,14 @@ export default async function squadsView({ rerender }) {
                 {},
                 chip(t(`squad.${player.mainSquad}`), `squad-${player.mainSquad.toLowerCase()}`),
               ),
-              h("td", { class: "num", text: fmt(player.power.AIR) }),
-              h("td", { class: "num", text: fmt(player.power.TANK) }),
-              h("td", { class: "num", text: fmt(player.power.MISSILE) }),
-              h("td", { class: "num", text: fmt(player.thp) }),
+              h("td", { class: "num", text: formatPower(player.power.AIR) }),
+              h("td", { class: "num", text: formatPower(player.power.TANK) }),
+              h("td", { class: "num", text: formatPower(player.power.MISSILE) }),
+              h("td", { class: "num", text: formatPower(player.thp) }),
               h(
                 "td",
                 { class: "num" },
-                h("div", { class: "stack" }, h("span", { text: fmt(player.totalPower) }), meter(topPower ? player.totalPower / topPower : 0)),
+                h("div", { class: "stack" }, h("span", { text: formatPower(player.totalPower) }), meter(topPower ? player.totalPower / topPower : 0)),
               ),
               h(
                 "td",
@@ -398,7 +386,7 @@ export default async function squadsView({ rerender }) {
                 "div",
                 { class: "row" },
                 ...SQUADS.map((squad) =>
-                  chip(`${t(`squad.${squad}`)} ${fmt(mine.power[squad])}`, `squad-${squad.toLowerCase()}`),
+                  chip(`${t(`squad.${squad}`)} ${formatPower(mine.power[squad])}`, `squad-${squad.toLowerCase()}`),
                 ),
               ),
             )

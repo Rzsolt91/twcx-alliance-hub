@@ -1490,11 +1490,13 @@ td.actions {
 
 .calday {
   min-height: 104px;
+  max-height: 180px;
   padding: 7px 8px;
   background: var(--ink-800);
   display: grid;
   gap: 5px;
   align-content: start;
+  overflow-y: auto;
 }
 
 .calday--outside {

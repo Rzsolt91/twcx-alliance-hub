@@ -2,12 +2,13 @@ import type { Account } from "../auth.js";
 import { assertPlayerName, canManage, ownPlayer, visibleModules } from "../auth.js";
 import { query, queryOne, transaction } from "../db.js";
 import { discordAuthorizeRedirect, discordOAuthConfigured } from "../discord.js";
-import { decimal, HttpError, integer, ok, oneOf, readJson, text } from "../http.js";
+import { HttpError, integer, ok, oneOf, powerAmount, readJson, text } from "../http.js";
 import type { RouteTable } from "../router.js";
 import { deleteUpload, fetchUpload, readMultipart } from "../uploads.js";
 import {
   ANCHOR_ZONE,
   SERVER_HOURS_BEHIND_ANCHOR,
+  asClock,
   instantFromServerClock,
   occurrencesInRange,
   serverWallClock,
@@ -90,10 +91,10 @@ function readPowerStats(body: Record<string, unknown>) {
       : body;
   const mainSquad = oneOf(nested.mainSquad ?? nested.main_squad ?? "AIR", SQUADS, "Main squad");
   return {
-    airPower: decimal(nested.airPower ?? nested.AIR ?? 0, "Air power"),
-    tankPower: decimal(nested.tankPower ?? nested.TANK ?? 0, "Tank power"),
-    missilePower: decimal(nested.missilePower ?? nested.MISSILE ?? 0, "Missile power"),
-    thp: decimal(nested.thp ?? 0, "Total hero power"),
+    airPower: powerAmount(nested.airPower ?? nested.AIR ?? 0, "Air power"),
+    tankPower: powerAmount(nested.tankPower ?? nested.TANK ?? 0, "Tank power"),
+    missilePower: powerAmount(nested.missilePower ?? nested.MISSILE ?? 0, "Missile power"),
+    thp: powerAmount(nested.thp ?? 0, "Total hero power"),
     mainSquad,
   };
 }
@@ -234,10 +235,10 @@ async function dashboard(account: Account) {
     title: string;
     weekday: number;
     server_time: string;
-  }>("SELECT id, title, weekday, server_time FROM weekly_events WHERE active = TRUE");
+  }>("SELECT id, title, weekday::int AS weekday, server_time::text AS server_time FROM weekly_events WHERE active = TRUE");
 
   const manual = await query(
-    `SELECT id, title, event_date::text AS event_date, server_time, category
+    `SELECT id, title, event_date::text AS event_date, server_time::text AS server_time, category
      FROM calendar_events
      WHERE active = TRUE AND event_date BETWEEN $1 AND $2
      ORDER BY event_date, server_time`,
@@ -256,8 +257,8 @@ async function dashboard(account: Account) {
 
   const upcoming: Upcoming[] = [];
   for (const storm of storms) {
-    const serverTime = storm.server_time.slice(0, 5);
-    for (const date of occurrencesInRange(storm.weekday, today, horizon)) {
+    const serverTime = asClock(storm.server_time);
+    for (const date of occurrencesInRange(Number(storm.weekday), today, horizon)) {
       upcoming.push({
         kind: "WEEKLY",
         id: storm.id,
@@ -271,7 +272,7 @@ async function dashboard(account: Account) {
   }
   for (const row of manual) {
     const date = String(row.event_date).slice(0, 10);
-    const serverTime = String(row.server_time).slice(0, 5);
+    const serverTime = asClock(row.server_time);
     upcoming.push({
       kind: "CALENDAR",
       id: row.id,

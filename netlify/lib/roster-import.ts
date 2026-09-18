@@ -7,6 +7,7 @@
  * recognised. Nothing is written here — the caller reviews the result first.
  */
 
+import { parsePower } from "../../shared/power.js";
 import type { SheetTable } from "./sheets.js";
 
 export const IMPORT_SQUADS = ["AIR", "TANK", "MISSILE"] as const;
@@ -85,42 +86,13 @@ function mapHeaders(headers: string[]) {
 
 /* --------------------------------------------------------------- values --- */
 
-const MULTIPLIERS: Record<string, number> = { k: 1e3, kk: 1e6, m: 1e6, mi: 1e6, b: 1e9, bi: 1e9, g: 1e9 };
-
 /**
  * Reads a power value the way alliance sheets actually write them: `1234567`,
  * `1.234.567`, `1,234,567`, `12.5M`, `40kk`, `1 234 567` or `1,5M`.
  */
 export function parseAmount(raw: unknown) {
-  let value = String(raw ?? "")
-    .replace(/[\s  ]/g, "")
-    .replace(/[^0-9.,kKmMbBgGiI+-]/g, "");
-  if (!value) return 0;
-
-  const suffix = /(kk|k|mi|m|bi|b|g)$/i.exec(value);
-  const multiplier = suffix ? (MULTIPLIERS[suffix[1].toLowerCase()] ?? 1) : 1;
-  if (suffix) value = value.slice(0, -suffix[1].length);
-
-  const lastDot = value.lastIndexOf(".");
-  const lastComma = value.lastIndexOf(",");
-
-  if (lastDot >= 0 && lastComma >= 0) {
-    // Whichever separator comes last is the decimal point.
-    const decimal = lastDot > lastComma ? "." : ",";
-    const thousands = decimal === "." ? "," : ".";
-    value = value.split(thousands).join("").replace(decimal, ".");
-  } else if (lastComma >= 0) {
-    const tail = value.length - lastComma - 1;
-    value = tail === 3 && !suffix ? value.split(",").join("") : value.replace(/,/g, ".");
-  } else if (lastDot >= 0) {
-    const tail = value.length - lastDot - 1;
-    // "1.234" is a thousands group; "1.5" (or "1.5M") is a decimal.
-    if (tail === 3 && !suffix) value = value.split(".").join("");
-  }
-
-  const number = Number(value);
-  if (!Number.isFinite(number) || number < 0) return 0;
-  return Math.round(Math.min(number * multiplier, 1e12) * 100) / 100;
+  const value = parsePower(raw);
+  return Number.isFinite(value) ? value : 0;
 }
 
 function parseRank(raw: unknown): "R4" | "R3" {

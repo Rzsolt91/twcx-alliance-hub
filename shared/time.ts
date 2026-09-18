@@ -150,15 +150,29 @@ export function serverWeekStart(date: string) {
  */
 export function nextOccurrenceDate(weekday: number, time: string, now: Date = new Date()) {
   const today = serverWallClock(now);
-  const gap = (weekday - serverDateWeekday(today.date) + 7) % 7;
+  const day = Number(weekday);
+  if (!Number.isFinite(day)) return today.date;
+  const gap = ((((Math.trunc(day) % 7) + 7) % 7) - serverDateWeekday(today.date) + 7) % 7;
   const candidate = shiftServerDate(today.date, gap);
   if (gap === 0 && today.time >= time) return shiftServerDate(candidate, 7);
   return candidate;
 }
 
+/** Normalise a TIME / clock value from Postgres or an input to `HH:MM`. */
+export function asClock(value: unknown) {
+  const raw = String(value ?? "").trim();
+  const match = raw.match(/(?:^|[T\s])(\d{1,2}):([0-5]\d)/) ?? raw.match(/^(\d{1,2}):([0-5]\d)/);
+  if (!match) return "00:00";
+  const hour = Number(match[1]);
+  if (hour > 23) return "00:00";
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
+}
+
 /** Every date matching `weekday` inside an inclusive server-date range. */
 export function occurrencesInRange(weekday: number, from: string, to: string) {
-  const gap = (weekday - serverDateWeekday(from) + 7) % 7;
+  const day = Number(weekday);
+  if (!Number.isFinite(day)) return [];
+  const gap = ((((Math.trunc(day) % 7) + 7) % 7) - serverDateWeekday(from) + 7) % 7;
   const dates: string[] = [];
   for (let date = shiftServerDate(from, gap); date <= to; date = shiftServerDate(date, 7)) {
     dates.push(date);
