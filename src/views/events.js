@@ -27,6 +27,9 @@ import {
   dateTimeIn,
   formatServerDate,
   instantFromServerClock,
+  signupDeadlineDate,
+  signupIsOpen,
+  stormKindFromEvent,
   viewTick,
   weekdayNames,
 } from "../lib/clock.js";
@@ -54,7 +57,27 @@ export default async function eventsView({ rerender }) {
   /* ------------------------------------------------------------- signups --- */
 
   function applyDialog(event, date, existing) {
-    const squadSelect = select({ value: existing?.squad ?? SQUADS[0] }, SQUADS.map((squad) => ({ value: squad, label: t(`squad.${squad}`) })));
+    const kind = stormKindFromEvent(event.title, event.weekday);
+    if (!signupIsOpen(date, kind)) {
+      toast(t("events.signupClosedBody"), "error");
+      return;
+    }
+    if (!event.active) {
+      toast(t("events.inactive"), "error");
+      return;
+    }
+    const squadSelect = select(
+      { value: existing?.squad ?? data.myMainSquad ?? SQUADS[0] },
+      SQUADS.map((squad) => ({ value: squad, label: t(`squad.${squad}`) })),
+    );
+    const teamSelect = select(
+      { value: existing?.stormTeam ?? "BOTH" },
+      [
+        { value: "A", label: t("events.stormTeam.A") },
+        { value: "B", label: t("events.stormTeam.B") },
+        { value: "BOTH", label: t("events.stormTeam.BOTH") },
+      ],
+    );
     const noteInput = input({ type: "text", maxlength: 200, value: existing?.note ?? "" });
 
     modal({
@@ -67,6 +90,7 @@ export default async function eventsView({ rerender }) {
           text: `${t("calendar.inYourZone")}: ${dateTimeIn(zone, instantFromServerClock(date, event.serverTime))}`,
         }),
         field(t("events.yourSquad"), squadSelect),
+        field(t("events.stormTeam"), teamSelect, t("events.stormTeamNote")),
         field(`${t("events.note")} (${t("common.optional")})`, noteInput),
       ),
       actions: (close) => [
@@ -83,6 +107,7 @@ export default async function eventsView({ rerender }) {
                   weeklyEventId: event.id,
                   occurrenceDate: date,
                   squad: squadSelect.value,
+                  stormTeam: teamSelect.value,
                   note: noteInput.value.trim(),
                 });
                 close();
@@ -137,6 +162,7 @@ export default async function eventsView({ rerender }) {
             {},
             h("th", { text: t("squads.name") }),
             h("th", { text: t("events.yourSquad") }),
+            h("th", { text: t("events.stormTeam") }),
             h("th", { class: "num", text: t("squads.total") }),
             h("th", { text: t("events.status.APPLIED") }),
             h("th", { text: t("events.note") }),
@@ -152,6 +178,7 @@ export default async function eventsView({ rerender }) {
               {},
               h("td", { class: "name", text: row.playerName }),
               h("td", {}, chip(t(`squad.${row.squad}`), `squad-${String(row.squad).toLowerCase()}`)),
+              h("td", {}, chip(t(`events.stormTeam.${row.stormTeam || "BOTH"}`))),
               h("td", { class: "num", text: NUMBER.format(row.power) }),
               h(
                 "td",
@@ -433,6 +460,12 @@ export default async function eventsView({ rerender }) {
       const instant = instantFromServerClock(selected, event.serverTime);
       const mine = signupsFor(event.id, selected).find((row) => row.playerId === data.myPlayerId);
       const total = signupsFor(event.id, selected).length;
+      const kind = stormKindFromEvent(event.title, event.weekday);
+      const deadlineDate = signupDeadlineDate(selected, kind);
+      const signupOpen = !past && signupIsOpen(selected, kind);
+      const deadlineCopy = t("events.signupCloses", {
+        when: formatServerDate(deadlineDate, { year: false }),
+      });
 
       const dateSelect = select(
         { value: selected },
@@ -456,6 +489,10 @@ export default async function eventsView({ rerender }) {
           const remaining = countdown(instant, now);
           count.textContent = remaining ?? t("common.today");
           if (!remaining) stopTick?.();
+          if (signupOpen && !signupIsOpen(selected, kind, now)) {
+            stopTick?.();
+            draw();
+          }
         });
       }
 
@@ -480,6 +517,7 @@ export default async function eventsView({ rerender }) {
               { class: "entry__meta" },
               h("span", {}, `${t("calendar.inYourZone")} `, h("b", { text: dateTimeIn(zone, instant) })),
               h("span", { text: t("events.signupCount", { count: total }) }),
+              h("span", { class: "muted", text: deadlineCopy }),
             ),
             event.description ? h("p", { class: "muted", text: event.description }) : null,
           ),
@@ -487,26 +525,29 @@ export default async function eventsView({ rerender }) {
             "div",
             { class: "entry__aside" },
             count,
-            !event.active ? chip(t("events.active"), "alert") : null,
             past
               ? chip(t("events.history"), "relay")
-              : mine
-                ? h(
-                    "button",
-                    { class: "btn btn--ghost btn--small", type: "button", onClick: () => withdraw(mine) },
-                    icon("close"),
-                    t("events.withdraw"),
-                  )
-                : h(
-                    "button",
-                    {
-                      class: "btn btn--primary btn--small",
-                      type: "button",
-                      onClick: () => applyDialog(event, selected, mine),
-                    },
-                    icon("check"),
-                    t("events.apply"),
-                  ),
+              : !event.active
+                ? chip(t("events.inactive"), "alert")
+                : mine
+                  ? h(
+                      "button",
+                      { class: "btn btn--ghost btn--small", type: "button", onClick: () => withdraw(mine) },
+                      icon("close"),
+                      t("events.withdraw"),
+                    )
+                  : signupOpen
+                    ? h(
+                        "button",
+                        {
+                          class: "btn btn--primary btn--small",
+                          type: "button",
+                          onClick: () => applyDialog(event, selected, mine),
+                        },
+                        icon("check"),
+                        t("events.apply"),
+                      )
+                    : chip(t("events.signupClosed"), "alert"),
           ),
         ),
         h("div", { class: "row" }, field(t("events.pickOccurrence"), dateSelect)),

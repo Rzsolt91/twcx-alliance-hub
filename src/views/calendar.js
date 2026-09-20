@@ -320,7 +320,12 @@ export default async function calendarView() {
   }
 
   function agenda(entries, today) {
-    const upcoming = entries.filter((entry) => entry.date >= today).slice(0, 12);
+    const upcoming = entries
+      .filter((entry) => {
+        const ms = Date.parse(entry.instant);
+        return Number.isFinite(ms) ? ms >= Date.now() : entry.date >= today;
+      })
+      .slice(0, 12);
     if (!upcoming.length) return empty(t("calendar.empty"));
 
     return h(

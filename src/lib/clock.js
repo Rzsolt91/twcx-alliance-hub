@@ -11,6 +11,10 @@ import {
   serverWallClock,
   serverWeekStart,
   shiftServerDate,
+  signupClosesAt,
+  signupDeadlineDate,
+  signupIsOpen,
+  stormKindFromEvent,
   wallClockIn,
 } from "../../shared/time.ts";
 import { locale } from "./i18n.js";
@@ -23,6 +27,10 @@ export {
   serverWallClock,
   serverWeekStart,
   shiftServerDate,
+  signupClosesAt,
+  signupDeadlineDate,
+  signupIsOpen,
+  stormKindFromEvent,
 };
 
 /** Every zone the runtime knows about — the brief asks for all of them. */

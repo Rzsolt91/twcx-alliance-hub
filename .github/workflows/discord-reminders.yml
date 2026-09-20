@@ -1,0 +1,28 @@
+name: Discord reminders
+
+on:
+  schedule:
+    # Canyon Thursday + Desert Friday. GitHub cron is UTC; the pass itself
+    # still only DMs inside the T-5 window and no-ops on other server days.
+    - cron: "*/5 * * * 4,5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Send due Discord DMs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
+        run: node scripts/run-reminders.mjs

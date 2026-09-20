@@ -2,6 +2,7 @@ import type { Account } from "../auth.js";
 import { assertPlayerName, canManage, ownPlayer, visibleModules } from "../auth.js";
 import { query, queryOne, transaction } from "../db.js";
 import { discordAuthorizeRedirect, discordOAuthConfigured } from "../discord.js";
+import { generatorPublicUrl } from "../blo.js";
 import { HttpError, integer, ok, oneOf, powerAmount, readJson, text } from "../http.js";
 import type { RouteTable } from "../router.js";
 import { deleteUpload, fetchUpload, readMultipart } from "../uploads.js";
@@ -81,6 +82,7 @@ async function session(account: Account) {
     clock: clockPayload(),
     languages: LANGUAGES,
     discordConnectAvailable: discordOAuthConfigured(),
+    generatorUrl: canManage(account) ? generatorPublicUrl() : null,
   });
 }
 

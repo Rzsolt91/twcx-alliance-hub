@@ -3,12 +3,28 @@ import { canManage, ownPlayer, requireManage, requireModule } from "../auth.js";
 import { query, queryOne, transaction } from "../db.js";
 import { HttpError, clockTime, integer, isoDate, ok, oneOf, readJson, text } from "../http.js";
 import type { RouteTable } from "../router.js";
-import { asClock, nextOccurrenceDate, serverWallClock, shiftServerDate } from "../../../shared/time.js";
+import { asClock, nextOccurrenceDate, serverWallClock, shiftServerDate, signupIsOpen, stormKindFromEvent } from "../../../shared/time.js";
+import { syncStormSignupsToGenerator } from "../blo.js";
 import { SQUADS } from "./roster.js";
 
 const UPCOMING_SLOTS = 4;
 const PAST_SLOTS = 6;
 const SIGNUP_STATUSES = ["APPLIED", "APPROVED", "REJECTED"] as const;
+const STORM_TEAMS = ["A", "B", "BOTH"] as const;
+
+function applicantPower(row: {
+  squad: string | null;
+  main_squad: string;
+  air_power: unknown;
+  tank_power: unknown;
+  missile_power: unknown;
+}) {
+  const squad = row.squad ?? row.main_squad;
+  if (squad === "AIR") return Number(row.air_power) || 0;
+  if (squad === "TANK") return Number(row.tank_power) || 0;
+  if (squad === "MISSILE") return Number(row.missile_power) || 0;
+  return (Number(row.air_power) || 0) + (Number(row.tank_power) || 0) + (Number(row.missile_power) || 0);
+}
 
 type WeeklyEventRow = {
   id: number;
@@ -80,7 +96,7 @@ async function overview(account: Account) {
     : today;
 
   const signups = await query(
-    `SELECT s.id, s.weekly_event_id, s.player_id, s.occurrence_date::text AS occurrence_date, s.status, s.squad, s.note,
+    `SELECT s.id, s.weekly_event_id, s.player_id, s.occurrence_date::text AS occurrence_date, s.status, s.squad, s.storm_team, s.note,
             p.name AS player_name, p.main_squad, p.air_power, p.tank_power, p.missile_power
      FROM event_signups s
      JOIN players p ON p.id = s.player_id
@@ -109,6 +125,7 @@ async function overview(account: Account) {
   return ok({
     events,
     myPlayerId: mine.id,
+    myMainSquad: mine.main_squad ?? "AIR",
     canManage: manage,
     signups: signups.map((row) => ({
       id: row.id,
@@ -118,9 +135,9 @@ async function overview(account: Account) {
       occurrenceDate: row.occurrence_date,
       status: row.status,
       squad: row.squad ?? row.main_squad,
+      stormTeam: row.storm_team === "A" || row.storm_team === "B" ? row.storm_team : "BOTH",
       note: row.note,
-      power:
-        Number(row.air_power) + Number(row.tank_power) + Number(row.missile_power),
+      power: applicantPower(row),
     })),
     teams: teams.map((row) => ({
       id: row.id,
@@ -216,22 +233,36 @@ async function signUp(account: Account, req: Request) {
   const occurrenceDate = isoDate(body.occurrenceDate, "Occurrence date");
   const note = text(body.note, "Note", { max: 200 });
   const mine = await ownPlayer(account);
-  const squad = body.squad ? oneOf(body.squad, SQUADS, "Squad") : mine.main_squad;
+  const squad = oneOf(body.squad ?? mine.main_squad ?? "AIR", SQUADS, "Squad");
+  const stormTeam = oneOf(body.stormTeam ?? body.storm_team ?? "BOTH", STORM_TEAMS, "Storm team");
 
-  const event = await queryOne("SELECT id FROM weekly_events WHERE id = $1 AND active = TRUE", [weeklyEventId]);
+  const event = await queryOne<WeeklyEventRow>(
+    `SELECT id, code, title, weekday::int AS weekday, server_time::text AS server_time, description, active
+     FROM weekly_events WHERE id = $1 AND active = TRUE`,
+    [weeklyEventId],
+  );
   if (!event) throw new HttpError("Storm slot not found.", 404);
 
-  const today = serverWallClock().date;
-  if (occurrenceDate < today) throw new HttpError("That storm has already run.", 409);
+  const slots = occurrences(event, new Date());
+  if (!slots.upcoming.includes(occurrenceDate)) {
+    throw new HttpError(
+      slots.past.includes(occurrenceDate) ? "That storm has already run." : "That date is not a slot for this storm.",
+      409,
+    );
+  }
+  if (!signupIsOpen(occurrenceDate, stormKindFromEvent(event.title, event.weekday))) {
+    throw new HttpError("Signups for this storm have closed.", 409);
+  }
 
   await query(
-    `INSERT INTO event_signups (weekly_event_id, player_id, occurrence_date, squad, note)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO event_signups (weekly_event_id, player_id, occurrence_date, squad, storm_team, note)
+     VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (weekly_event_id, player_id, occurrence_date)
-     DO UPDATE SET squad = EXCLUDED.squad, note = EXCLUDED.note, status = 'APPLIED'`,
-    [weeklyEventId, mine.id, occurrenceDate, squad, note],
+     DO UPDATE SET squad = EXCLUDED.squad, storm_team = EXCLUDED.storm_team, note = EXCLUDED.note, status = 'APPLIED'`,
+    [weeklyEventId, mine.id, occurrenceDate, squad, stormTeam, note],
   );
-  return ok({ applied: true, squad });
+  await syncStormSignupsToGenerator(weeklyEventId, occurrenceDate);
+  return ok({ applied: true, squad, stormTeam });
 }
 
 /** DELETE /api/events/signup — withdraw, or an R4/Master removes an applicant. */
@@ -239,7 +270,10 @@ async function withdraw(account: Account, url: URL) {
   requireModule(account, "events");
   const id = integer(url.searchParams.get("id"), "Signup id", { min: 1 });
 
-  const signup = await queryOne<{ player_id: number }>("SELECT player_id FROM event_signups WHERE id = $1", [id]);
+  const signup = await queryOne<{ player_id: number; weekly_event_id: number; occurrence_date: string }>(
+    "SELECT player_id, weekly_event_id, occurrence_date::text AS occurrence_date FROM event_signups WHERE id = $1",
+    [id],
+  );
   if (!signup) throw new HttpError("Signup not found.", 404);
 
   if (!canManage(account)) {
@@ -248,6 +282,7 @@ async function withdraw(account: Account, url: URL) {
   }
 
   await query("DELETE FROM event_signups WHERE id = $1", [id]);
+  await syncStormSignupsToGenerator(signup.weekly_event_id, signup.occurrence_date);
   return ok({ id });
 }
 
@@ -258,8 +293,13 @@ async function reviewSignup(account: Account, req: Request) {
   const id = integer(body.id, "Signup id", { min: 1 });
   const status = oneOf(body.status, SIGNUP_STATUSES, "Status");
 
-  const updated = await query("UPDATE event_signups SET status = $1 WHERE id = $2 RETURNING id", [status, id]);
+  const updated = await query<{ id: number; weekly_event_id: number; occurrence_date: string }>(
+    `UPDATE event_signups SET status = $1 WHERE id = $2
+     RETURNING id, weekly_event_id, occurrence_date::text AS occurrence_date`,
+    [status, id],
+  );
   if (!updated[0]) throw new HttpError("Signup not found.", 404);
+  await syncStormSignupsToGenerator(updated[0].weekly_event_id, updated[0].occurrence_date);
   return ok({ id, status });
 }
 

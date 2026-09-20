@@ -23,7 +23,7 @@ import {
   toast,
 } from "../lib/dom.js";
 import { t } from "../lib/i18n.js";
-import { isMaster } from "../lib/store.js";
+import { isMaster, session } from "../lib/store.js";
 import { uploadDialog } from "../lib/upload.js";
 
 const LIBRARIES = ["EVENT", "VS", "SITE", "EXCEL"];
@@ -683,6 +683,21 @@ export default async function adminView() {
 
   /* ------------------------------------------------------------------ draw --- */
 
+  function generatorPanel() {
+    const url = session()?.generatorUrl;
+    if (!url) return null;
+    return panel({
+      title: t("admin.generator"),
+      subtitle: t("admin.generatorNote"),
+      actions: h(
+        "a",
+        { class: "btn btn--primary", href: `${url.replace(/\/$/, "")}/admin` },
+        t("admin.generatorOpen"),
+      ),
+      body: h("p", { class: "muted", text: t("admin.generatorBody") }),
+    });
+  }
+
   async function load() {
     const [users, content, libraryFiles, siteImages, invites] = await Promise.all([
       api.get("admin/users"),
@@ -698,6 +713,7 @@ export default async function adminView() {
       root,
       hero(content.sections ?? {}, "admin", { title: t("admin.title"), body: t("admin.subtitle") }),
       master ? null : h("p", { class: "notice notice--alert", text: t("admin.masterOnly") }),
+      generatorPanel(),
       invitesPanel(invites),
       accountsPanel(users),
       frag(contentPanel(content, images), libraryPanel(libraryFiles.files)),

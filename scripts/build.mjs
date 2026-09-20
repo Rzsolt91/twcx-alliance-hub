@@ -56,7 +56,7 @@ export async function bundleReminders() {
   await mkdir(join(root, ".netlify", "local"), { recursive: true });
   await esbuild.build({
     absWorkingDir: root,
-    entryPoints: ["netlify/functions/discord-reminders.mts"],
+    entryPoints: ["scripts/reminders-entry.mts"],
     bundle: true,
     platform: "node",
     format: "esm",

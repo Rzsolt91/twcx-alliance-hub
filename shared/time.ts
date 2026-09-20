@@ -138,6 +138,50 @@ export function serverDateWeekday(date: string) {
   return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
 }
 
+/** Server clock when storm signups close (15:00 UK / Lisbon). */
+export const SIGNUP_DEADLINE_SERVER_TIME = "12:00";
+
+export type StormKind = "desert-storm" | "canyon-storm";
+
+/**
+ * Desert Storm closes Wednesday 12:00 server; Canyon Storm the Monday before
+ * at the same clock. Unknown titles follow the slot weekday (Thu → Canyon).
+ */
+export function stormKindFromEvent(title: string, weekday?: number): StormKind {
+  const value = String(title ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s_]+/g, "-");
+  if (value.includes("canyon")) return "canyon-storm";
+  if (value.includes("desert")) return "desert-storm";
+  return weekday === 4 ? "canyon-storm" : "desert-storm";
+}
+
+/** Most recent `weekday` on or before `date` in the server calendar. */
+export function previousServerWeekdayOnOrBefore(date: string, weekday: number) {
+  const day = ((Math.trunc(Number(weekday)) % 7) + 7) % 7;
+  const gap = (serverDateWeekday(date) - day + 7) % 7;
+  return shiftServerDate(date, -gap);
+}
+
+export function signupDeadlineWeekday(kind: StormKind) {
+  return kind === "canyon-storm" ? 1 : 3;
+}
+
+export function signupDeadlineDate(occurrenceDate: string, kind: StormKind) {
+  return previousServerWeekdayOnOrBefore(occurrenceDate, signupDeadlineWeekday(kind));
+}
+
+export function signupClosesAt(occurrenceDate: string, kind: StormKind) {
+  return instantFromServerClock(signupDeadlineDate(occurrenceDate, kind), SIGNUP_DEADLINE_SERVER_TIME);
+}
+
+/** Apply is allowed strictly before the deadline instant. */
+export function signupIsOpen(occurrenceDate: string, kind: StormKind, now: Date | number = Date.now()) {
+  const ms = now instanceof Date ? now.getTime() : now;
+  return ms < signupClosesAt(occurrenceDate, kind).getTime();
+}
+
 /** Monday that starts the server week containing `date`. */
 export function serverWeekStart(date: string) {
   const weekday = serverDateWeekday(date);

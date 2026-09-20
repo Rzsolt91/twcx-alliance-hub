@@ -1,11 +1,19 @@
 import { sendDiscordDM } from "./discord.js";
 import { query } from "./db.js";
-import { asClock, instantFromServerClock, nextOccurrenceDate, shiftServerDate } from "../../shared/time.js";
+import {
+  asClock,
+  instantFromServerClock,
+  nextOccurrenceDate,
+  serverWallClock,
+  shiftServerDate,
+} from "../../shared/time.js";
 
 /** DMs go out once, five minutes before that event starts — not on a 24/7 poll. */
 const LEAD_MINUTES = 5;
 /** Timer/clock skew around T-5. Send only if the start is 4–6 minutes away. */
 const WINDOW_MINUTES = 1;
+/** Canyon is Thursday, Desert is Friday (server weekdays). */
+const REMINDER_WEEKDAYS = new Set([4, 5]);
 
 type ReminderRow = {
   signup_id: number;
@@ -36,6 +44,12 @@ function inSendWindow(startAt: number, now: number) {
 
 function fireAt(startAt: number) {
   return startAt - leadMs();
+}
+
+/** Storm reminder DMs only fire on server Thursday and Friday. */
+export function isStormReminderDay(now: Date | number = Date.now()) {
+  const instant = now instanceof Date ? now : new Date(now);
+  return REMINDER_WEEKDAYS.has(serverWallClock(instant).weekday);
 }
 
 /**
@@ -71,6 +85,10 @@ export async function msUntilNextReminder(): Promise<number | null> {
 }
 
 export async function runReminderPass() {
+  if (!isStormReminderDay()) {
+    return { sent: 0, failed: 0, skipped: 0, deferred: 0, idle: true };
+  }
+
   const token = String(process.env.DISCORD_BOT_TOKEN ?? "").trim();
   if (!token) {
     return { sent: 0, failed: 0, skipped: 0, deferred: 0 };
