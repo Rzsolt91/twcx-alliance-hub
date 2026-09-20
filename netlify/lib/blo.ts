@@ -1,14 +1,16 @@
 /**
- * Pushes alliance-hub storm applies into the local BLO generator, the same
+ * Pushes alliance-hub storm applies into the BLO generator, the same
  * shape Generate Teams expects after an Excel import. Failures are logged and
  * never block Apply on the portal.
  */
 
 import { query, queryOne } from "./db.js";
+import { asClock, nextOccurrenceDate } from "../../shared/time.js";
 
 type BloEvent = "desert-storm" | "canyon-storm";
 
 const WEEK_ID_RE = /^(\d{4})-W(\d{2})$/;
+const BLO_EVENTS: BloEvent[] = ["desert-storm", "canyon-storm"];
 
 function bloOrigin() {
   return String(process.env.BLO_ORIGIN ?? "").trim().replace(/\/$/, "");
@@ -62,18 +64,9 @@ function stormTeamLabel(value: string | null) {
   return "Both";
 }
 
-export async function syncStormSignupsToGenerator(weeklyEventId: number, occurrenceDate: string) {
-  const origin = bloOrigin();
-  if (!origin) return;
-
-  const event = await queryOne<{ title: string }>("SELECT title FROM weekly_events WHERE id = $1", [weeklyEventId]);
-  if (!event) return;
-  const bloEvent = bloEventFromTitle(event.title);
-  if (!bloEvent) return;
-
-  const weekId = weekIdFromIsoDate(occurrenceDate);
+async function entriesForWeek(bloEvent: BloEvent, weekId: string) {
   const range = isoWeekDateRange(weekId);
-  if (!range) return;
+  if (!range) return [];
 
   const rows = await query<{
     player_name: string;
@@ -107,6 +100,17 @@ export async function syncStormSignupsToGenerator(weeklyEventId: number, occurre
       power: squadPower(row),
     });
   }
+  return entries;
+}
+
+async function pushEventWeek(bloEvent: BloEvent, weekId: string, options: { allowEmpty: boolean }) {
+  const origin = bloOrigin();
+  if (!origin) return { ok: false, skipped: "no-origin" as const, count: 0 };
+
+  const entries = await entriesForWeek(bloEvent, weekId);
+  if (!entries.length && !options.allowEmpty) {
+    return { ok: true, skipped: "empty" as const, count: 0 };
+  }
 
   const token = String(process.env.HUB_SYNC_TOKEN ?? "").trim();
   const headers: Record<string, string> = { "content-type": "application/json" };
@@ -116,13 +120,53 @@ export async function syncStormSignupsToGenerator(weeklyEventId: number, occurre
     const response = await fetch(`${origin}/api/data/hub/sync`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ weekId, event: bloEvent, occurrenceDate, entries }),
+      body: JSON.stringify({ weekId, event: bloEvent, entries }),
     });
     if (!response.ok) {
       const body = await response.text().catch(() => "");
-      console.warn(`[blo] hub sync ${response.status} ${body.slice(0, 300)}`);
+      console.warn(`[blo] hub sync ${bloEvent} ${weekId} ${response.status} ${body.slice(0, 300)}`);
+      return { ok: false, skipped: null, count: entries.length };
     }
+    return { ok: true, skipped: null, count: entries.length };
   } catch (error) {
     console.warn("[blo] hub sync failed", error instanceof Error ? error.message : error);
+    return { ok: false, skipped: null, count: entries.length };
   }
+}
+
+/** Push this storm’s week, and the other storm for the same ISO week if it has applies. */
+export async function syncStormSignupsToGenerator(weeklyEventId: number, occurrenceDate: string) {
+  const event = await queryOne<{ title: string }>("SELECT title FROM weekly_events WHERE id = $1", [weeklyEventId]);
+  if (!event) return;
+  const bloEvent = bloEventFromTitle(event.title);
+  if (!bloEvent) return;
+
+  const weekId = weekIdFromIsoDate(occurrenceDate);
+  await pushEventWeek(bloEvent, weekId, { allowEmpty: true });
+  const other = bloEvent === "desert-storm" ? "canyon-storm" : "desert-storm";
+  await pushEventWeek(other, weekId, { allowEmpty: false });
+}
+
+/** Push every upcoming storm week that already has hub applies. */
+export async function syncUpcomingStormsToGenerator() {
+  if (!bloOrigin()) return [];
+
+  const slots = await query<{ title: string; weekday: number; server_time: string }>(
+    `SELECT title, weekday::int AS weekday, server_time::text AS server_time
+     FROM weekly_events WHERE active = TRUE`,
+  );
+  const weekIds = new Set<string>();
+  const now = new Date();
+  for (const slot of slots) {
+    if (!bloEventFromTitle(slot.title)) continue;
+    weekIds.add(weekIdFromIsoDate(nextOccurrenceDate(Number(slot.weekday), asClock(slot.server_time), now)));
+  }
+
+  const results = [];
+  for (const weekId of weekIds) {
+    for (const bloEvent of BLO_EVENTS) {
+      results.push({ weekId, event: bloEvent, ...(await pushEventWeek(bloEvent, weekId, { allowEmpty: false })) });
+    }
+  }
+  return results;
 }

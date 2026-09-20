@@ -4,7 +4,7 @@ import { query, queryOne, transaction } from "../db.js";
 import { HttpError, clockTime, integer, isoDate, ok, oneOf, readJson, text } from "../http.js";
 import type { RouteTable } from "../router.js";
 import { asClock, nextOccurrenceDate, serverWallClock, shiftServerDate, signupIsOpen, stormKindFromEvent } from "../../../shared/time.js";
-import { syncStormSignupsToGenerator } from "../blo.js";
+import { syncStormSignupsToGenerator, syncUpcomingStormsToGenerator } from "../blo.js";
 import { SQUADS } from "./roster.js";
 
 const UPCOMING_SLOTS = 4;
@@ -121,6 +121,10 @@ async function overview(account: Account) {
      ORDER BY i.created_at DESC
      LIMIT 60`,
   );
+
+  if (manage) {
+    await syncUpcomingStormsToGenerator();
+  }
 
   return ok({
     events,

@@ -1,0 +1,25 @@
+name: Sync generator signups
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Push hub applies to the generator
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          HUB_SYNC_TOKEN: ${{ secrets.HUB_SYNC_TOKEN }}
+          BLO_ORIGIN: https://twcx-generator.netlify.app
+        run: node scripts/sync-generator.mjs
