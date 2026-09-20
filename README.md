@@ -4,7 +4,7 @@ Private Last War Survival alliance portal.
 
 - **Netlify** hosts the site and the on-demand `/api` (only when someone uses the portal).
 - **Supabase** (or any Postgres) holds the database.
-- **GitHub Actions** sends Discord DMs at T-5, only on Thursday and Friday.
+- **GitHub Actions** sends Discord DMs ~5 minutes before a storm or calendar event.
 
 ## Local
 
@@ -53,13 +53,14 @@ into `.env.local` when missing. Production on Netlify must set:
 
 ## Discord reminders
 
-DMs go out **once, five minutes before that event starts**, and only to
-players signed up for that occurrence, on **server Thursday and Friday**.
+DMs go out **once, about five minutes before that event starts**:
+- Storms: signed-up players with Discord connected
+- Calendar events: members who turned on Remind me, with Discord connected
 
-Locally the hub sleeps until T-5. In production GitHub Actions runs every five
-minutes on Thursday and Friday UTC (`.github/workflows/discord-reminders.yml`).
-The pass no-ops outside the send window. Manual run: Actions → Discord
-reminders → Run workflow.
+Any weekday is covered. Locally the hub sleeps until T-5. In production GitHub
+Actions runs **once an hour**; if the next event is more than ~70 minutes away
+it exits immediately. If it is closer, it sleeps until T-5 then sends.
+Manual run: Actions → Discord reminders → Run workflow.
 
 GitHub secrets:
 

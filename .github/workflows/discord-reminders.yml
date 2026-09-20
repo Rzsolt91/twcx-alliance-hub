@@ -2,9 +2,9 @@ name: Discord reminders
 
 on:
   schedule:
-    # Canyon Thursday + Desert Friday. GitHub cron is UTC; the pass itself
-    # still only DMs inside the T-5 window and no-ops on other server days.
-    - cron: "*/5 * * * 4,5"
+    # Once an hour, every day. The script exits immediately unless a storm or
+    # calendar event is within ~70 minutes, then it sleeps until T-5 and DMs.
+    - cron: "7 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   remind:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 80
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v6

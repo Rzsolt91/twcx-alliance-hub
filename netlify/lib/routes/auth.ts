@@ -247,6 +247,7 @@ async function applyLiveSchema(client: TxClient) {
     `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_lookup ON users(email_lookup_hash) WHERE email_lookup_hash IS NOT NULL`,
     `ALTER TABLE event_signups ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ`,
     `ALTER TABLE event_signups ADD COLUMN IF NOT EXISTS storm_team TEXT NOT NULL DEFAULT 'BOTH'`,
+    `ALTER TABLE calendar_reminders ADD COLUMN IF NOT EXISTS discord_sent_at TIMESTAMPTZ`,
   ];
   for (const sql of statements) {
     await client.query(sql);
