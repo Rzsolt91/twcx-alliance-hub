@@ -141,8 +141,8 @@ export function serverDateWeekday(date: string) {
 /** Server clock when storm signups close (15:00 UK / Lisbon). */
 export const SIGNUP_DEADLINE_SERVER_TIME = "12:00";
 
-/** Set true to block Apply after the deadline. Suspended for a live signup test. */
-export const SIGNUP_DEADLINE_ENFORCED = false;
+/** Set true to block Apply after the deadline. */
+export const SIGNUP_DEADLINE_ENFORCED = true;
 
 export type StormKind = "desert-storm" | "canyon-storm";
 
