@@ -141,6 +141,9 @@ export function serverDateWeekday(date: string) {
 /** Server clock when storm signups close (15:00 UK / Lisbon). */
 export const SIGNUP_DEADLINE_SERVER_TIME = "12:00";
 
+/** Set true to block Apply after the deadline. Suspended for a live signup test. */
+export const SIGNUP_DEADLINE_ENFORCED = false;
+
 export type StormKind = "desert-storm" | "canyon-storm";
 
 /**
@@ -178,6 +181,7 @@ export function signupClosesAt(occurrenceDate: string, kind: StormKind) {
 
 /** Apply is allowed strictly before the deadline instant. */
 export function signupIsOpen(occurrenceDate: string, kind: StormKind, now: Date | number = Date.now()) {
+  if (!SIGNUP_DEADLINE_ENFORCED) return true;
   const ms = now instanceof Date ? now.getTime() : now;
   return ms < signupClosesAt(occurrenceDate, kind).getTime();
 }
